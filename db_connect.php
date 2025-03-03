@@ -6,7 +6,7 @@
 
     $servername = "localhost";
     $username = "root";
-    $password = "123456789";
+    $password = "12345678";
     $dbname = "iauop_kmutnb";
 
     $conn = new mysqli($servername, $username, $password, $dbname);
