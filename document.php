@@ -1,5 +1,5 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
@@ -161,7 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (move_uploaded_file($file['tmp_name'], $targetFilePath)) { 
-            $stmt = $conn->prepare("UPDATE documents SET topic_th = ?, description_th = ?, filename = ?, updated_at = ?, updated_by = ? WHERE id_documents = ?");
+            $stmt = $conn->prepare("UPDATE documents SET topic_th = ?,
+             description_th = ?, filename = ?, updated_at = ?, updated_by = ? WHERE id_documents = ?");
             if (!$stmt) {
                 http_response_code(500);
                 echo json_encode(["success" => false, "message" => "ข้อผิดพลาดในการเตรียมคำสั่ง SQL"]);
