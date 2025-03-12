@@ -6,9 +6,9 @@
     header("Access-Control-Allow-Origin: *");
     header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
     header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-    // error_reporting(E_ALL); 
-    // ini_set('display_errors', 1);
+    // print error on postman
+    error_reporting(E_ALL); 
+    ini_set('display_errors', 1);
 
     include 'db_connect.php';
 
@@ -43,7 +43,6 @@
             // ส่ง `success: true` เสมอ แต่ถ้าไม่มีข้อมูลให้ personal เป็น `[]`
             echo json_encode(["success" => true, "personal" => $rows ?: []]);
         } else {
-            // กรณี SQL ผิดพลาด (เช่น JOIN ผิด)
             echo json_encode(["success" => false, "message" => "เกิดข้อผิดพลาดในการดึงข้อมูล", "error" => $conn->error]);
         }
 
@@ -51,111 +50,266 @@
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if(isset($_POST['action']) && $_POST['action'] === 'delete' && isset($_POST['id'])){
-            $id_personal = $_POST['id'];
-            // var_dump('ddddd test alert');
-            $stmt = $conn->prepare("DELETE FROM personal WHERE id_personal = ?");
-            $stmt->bind_param("i", $id_personal);
+        if (isset($_POST['action'])) {
+            $action = $_POST['action'];
+            // var_dump("ffff",$action);
+            if ($action === 'delete' && isset($_POST['id'])) {
+                $id_personal = $_POST['id'];
+                // var_dump('ddddd test alert');
+                $stmt = $conn->prepare("DELETE FROM personal WHERE id_personal = ?");
+                $stmt->bind_param("i", $id_personal);
 
-            if ($stmt->execute()) {
-                // ลบไฟล์รูปที่เกี่ยวข้องหากมี
-                $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
-                foreach ($oldFiles as $oldFile) {
-                    if (file_exists($oldFile)) {
-                        unlink($oldFile);
+                if ($stmt->execute()) {
+                    $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
+                    foreach ($oldFiles as $oldFile) {
+                        if (file_exists($oldFile)) {
+                            unlink($oldFile);
+                        }
                     }
-                }
-                echo json_encode(["success" => true, "message" => "ลบข้อมูลสำเร็จ"]);
-            } else{
-                http_response_code(500);
-                echo json_encode(["success" => false, "message" => "ไม่สามารถลบข้อมูลได้"]);
-            }
-            $stmt->close();
-            exit;
-        }else{
-            $id_personal = $_POST['id_personal'];
-            $name = $_POST['name'];
-            $surname = $_POST['surname'];
-            $position = $_POST['position'];
-            $department = $_POST['department'];
-            $email = $_POST['email'];
-            $phone = $_POST['phone'];
-            $extension = $_POST['extension'];
-            $updated_by = $_POST['updated_by'];
-        
-            $newFileName = null; // กำหนดค่าเริ่มต้นสำหรับไฟล์รูป
-        
-            // ตรวจสอบว่ามีการอัปโหลดไฟล์รูปใหม่หรือไม่
-            if (isset($_FILES['image_personal_name']) && $_FILES['image_personal_name']['error'] === UPLOAD_ERR_OK) {
-                $file = $_FILES['image_personal_name'];
-                $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-                $maxSize = 1000000;
-        
-                if (!in_array($file['type'], $allowedTypes)) {
-                    http_response_code(400);
-                    echo json_encode(["status" => "error", "message" => "อนุญาตเฉพาะไฟล์ JPG, JPEG และ PNG เท่านั้น"]);
-                    exit;
-                }
-        
-                if ($file['size'] > $maxSize) {
-                    http_response_code(400);
-                    echo json_encode(["status" => "error", "message" => "ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 1000KB)"]);
-                    exit;
-                }
-        
-                // ตั้งค่าชื่อไฟล์ใหม่
-                $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $newFileName = "Personel_{$id_personal}.{$fileExtension}";
-                $targetFilePath = $targetDir . $newFileName;
-    
-        
-                // ค้นหาไฟล์รูปเดิมและลบออกหากมี
-                $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
-                foreach ($oldFiles as $oldFile) {
-                    if (file_exists($oldFile)) {
-                        unlink($oldFile);
-                    }
-                }
-        
-                // อัปโหลดไฟล์ใหม่
-                if (!move_uploaded_file($file['tmp_name'], $targetFilePath)) {
+                    echo json_encode(["success" => true, "message" => "ลบข้อมูลสำเร็จ"]);
+                } else{
                     http_response_code(500);
-                    echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกไฟล์ได้"]);
-                    exit;
+                    echo json_encode(["success" => false, "message" => "ไม่สามารถลบข้อมูลได้"]);
                 }
-            }
-            //var_dump('dddd test alret');
-            // สร้าง SQL สำหรับอัปเดตข้อมูล
-            if ($newFileName) {
-                $stmt = $conn->prepare("UPDATE personal SET 
-                                        name = ?, surname = ?, image_personal_name = ?, 
-                                        position = ?, department = ?, email = ?, 
-                                        phone = ?, extension = ?, updated_by = ?
-                                        WHERE id_personal = ?");
-                $stmt->bind_param("sssssssssi", $name, $surname, $newFileName, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
-            } else {
-                // ถ้าไม่มีการอัปโหลดรูป ให้ใช้ SQL แบบไม่อัปเดตฟิลด์ image_personal_name
-                $stmt = $conn->prepare("UPDATE personal SET 
-                                        name = ?, surname = ?, position = ?, 
-                                        department = ?, email = ?, phone = ?, 
-                                        extension = ?, updated_by = ?
-                                        WHERE id_personal = ?");
-                $stmt->bind_param("ssssssssi", $name, $surname, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
-            }
+                $stmt->close();
+                exit;
+            }elseif ($action === 'insert') {
+                $prename = $_POST['prename'];
+                $name = $_POST['name'];
+                $surname = $_POST['surname'];
+                $position = $_POST['position'];
+                $department = $_POST['department'];
+                $email = $_POST['email'];
+                $phone = $_POST['phone'];
+                $extension = $_POST['extension'];
+                $updated_by = $_POST['updated_by'];
+
+                $stmt = $conn->prepare("INSERT INTO personal (prename, name, surname, position, department, email, phone, extension, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssssssssi", $prename, $name, $surname, $position, $department, $email, $phone, $extension, $updated_by);
+                if ($stmt->execute()) {
+                    $id_personal = $conn->insert_id; // รับค่า id ล่าสุดที่เพิ่มเข้าไป
+                    $newFileName = null;
+                    
+                    if (isset($_FILES['image_personal_name']) && $_FILES['image_personal_name']['error'] === UPLOAD_ERR_OK) {
+                        $file = $_FILES['image_personal_name'];
+                        $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                        $maxSize = 1000000;
+
+                        if (!in_array($file['type'], $allowedTypes)) {
+                            http_response_code(400);
+                            echo json_encode(["status" => "error", "message" => "อนุญาตเฉพาะไฟล์ JPG, JPEG และ PNG เท่านั้น"]);
+                            exit;
+                        }
+
+                        if ($file['size'] > $maxSize) {
+                            http_response_code(400);
+                            echo json_encode(["status" => "error", "message" => "ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 1000KB)"]);
+                            exit;
+                        }
+
+                        $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                        $newFileName = "Personel_{$id_personal}.{$fileExtension}";
+                        $targetFilePath = $targetDir . $newFileName;
+
+                        if (!move_uploaded_file($file['tmp_name'], $targetFilePath)) {
+                            http_response_code(500);
+                            echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกไฟล์ได้"]);
+                            exit;
+                        }
+
+                        $stmt = $conn->prepare("UPDATE personal SET image_personal_name = ? WHERE id_personal = ?");
+                        $stmt->bind_param("si", $newFileName, $id_personal);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+                    echo json_encode(["success" => true, "message" => "เพิ่มข้อมูลสำเร็จ", "id_personal" => $id_personal]);
+                }else {
+                    http_response_code(500);
+                    echo json_encode(["success" => false, "message" => "ไม่สามารถเพิ่มข้อมูลได้"]);
+                }
+
+            }elseif ($action === 'update' && isset($_POST['id_personal'])) {
+                $id_personal = $_POST['id_personal'];
+                $prename = $_POST['prename'];
+                $name = $_POST['name'];
+                $surname = $_POST['surname'];
+                $position = $_POST['position'];
+                $department = $_POST['department'];
+                $email = $_POST['email'];
+                $phone = $_POST['phone'];
+                $extension = $_POST['extension'];
+                $updated_by = $_POST['updated_by'];
+            
+                $newFileName = null;
+            
+                if (isset($_FILES['image_personal_name']) && $_FILES['image_personal_name']['error'] === UPLOAD_ERR_OK) {
+                    $file = $_FILES['image_personal_name'];
+                    $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                    $maxSize = 1000000;
+            
+                    if (!in_array($file['type'], $allowedTypes)) {
+                        http_response_code(400);
+                        echo json_encode(["status" => "error", "message" => "อนุญาตเฉพาะไฟล์ JPG, JPEG และ PNG เท่านั้น"]);
+                        exit;
+                    }
+            
+                    if ($file['size'] > $maxSize) {
+                        http_response_code(400);
+                        echo json_encode(["status" => "error", "message" => "ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 1000KB)"]);
+                        exit;
+                    }
+            
+                    $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    $newFileName = "Personel_{$id_personal}.{$fileExtension}";
+                    $targetFilePath = $targetDir . $newFileName;
         
-            if ($stmt->execute()) {
-                echo json_encode(["success" => true, "message" => "อัปเดตข้อมูลสำเร็จ"]);
-            } else {
-                http_response_code(500);
-                echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกข้อมูลลงในฐานข้อมูล"]);
+                    $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
+                    foreach ($oldFiles as $oldFile) {
+                        if (file_exists($oldFile)) {
+                            unlink($oldFile);
+                        }
+                    }
+            
+                    if (!move_uploaded_file($file['tmp_name'], $targetFilePath)) {
+                        http_response_code(500);
+                        echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกไฟล์ได้"]);
+                        exit;
+                    }
+                }
+                //var_dump('dddd test alret');
+                if ($newFileName) {
+                    $stmt = $conn->prepare("UPDATE personal SET 
+                                            prename = ?, name = ?, surname = ?, image_personal_name = ?, 
+                                            position = ?, department = ?, email = ?, 
+                                            phone = ?, extension = ?, updated_by = ?
+                                            WHERE id_personal = ?");
+                    $stmt->bind_param("sssssssssii", $prename, $name, $surname, $newFileName, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
+                } else {
+                    $stmt = $conn->prepare("UPDATE personal SET prename = ?,
+                                            name = ?, surname = ?, position = ?, 
+                                            department = ?, email = ?, phone = ?, 
+                                            extension = ?, updated_by = ?
+                                            WHERE id_personal = ?");
+                    $stmt->bind_param("ssssssssii", $prename, $name, $surname, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
+                }
+            
+                if ($stmt->execute()) {
+                    echo json_encode(["success" => true, "message" => "อัปเดตข้อมูลสำเร็จ"]);
+                } else {
+                    http_response_code(500);
+                    echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกข้อมูลลงในฐานข้อมูล"]);
+                }
+            
+                $stmt->close();
             }
-        
-            $stmt->close();
+        }else {
+            http_response_code(400);
+            echo json_encode(["success" => false, "message" => "Action ไม่ถูกต้อง"]);
         }
-    } else {
+    }else {
         http_response_code(405);
         echo json_encode(["success" => false, "message" => "Method Not Allowed"]);
     }
+
+    // if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    //     if(isset($_POST['action']) && $_POST['action'] === 'delete' && isset($_POST['id'])){
+    //         $id_personal = $_POST['id'];
+    //         // var_dump('ddddd test alert');
+    //         $stmt = $conn->prepare("DELETE FROM personal WHERE id_personal = ?");
+    //         $stmt->bind_param("i", $id_personal);
+
+    //         if ($stmt->execute()) {
+    //             $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
+    //             foreach ($oldFiles as $oldFile) {
+    //                 if (file_exists($oldFile)) {
+    //                     unlink($oldFile);
+    //                 }
+    //             }
+    //             echo json_encode(["success" => true, "message" => "ลบข้อมูลสำเร็จ"]);
+    //         } else{
+    //             http_response_code(500);
+    //             echo json_encode(["success" => false, "message" => "ไม่สามารถลบข้อมูลได้"]);
+    //         }
+    //         $stmt->close();
+    //         exit;
+    //     }else{
+    //         $id_personal = $_POST['id_personal'];
+    //         $prename = $_POST['prename'];
+    //         $name = $_POST['name'];
+    //         $surname = $_POST['surname'];
+    //         $position = $_POST['position'];
+    //         $department = $_POST['department'];
+    //         $email = $_POST['email'];
+    //         $phone = $_POST['phone'];
+    //         $extension = $_POST['extension'];
+    //         $updated_by = $_POST['updated_by'];
+           
+    //         $newFileName = null;
+        
+    //         if (isset($_FILES['image_personal_name']) && $_FILES['image_personal_name']['error'] === UPLOAD_ERR_OK) {
+    //             $file = $_FILES['image_personal_name'];
+    //             $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    //             $maxSize = 1000000;
+        
+    //             if (!in_array($file['type'], $allowedTypes)) {
+    //                 http_response_code(400);
+    //                 echo json_encode(["status" => "error", "message" => "อนุญาตเฉพาะไฟล์ JPG, JPEG และ PNG เท่านั้น"]);
+    //                 exit;
+    //             }
+        
+    //             if ($file['size'] > $maxSize) {
+    //                 http_response_code(400);
+    //                 echo json_encode(["status" => "error", "message" => "ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 1000KB)"]);
+    //                 exit;
+    //             }
+        
+    //             $fileExtension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    //             $newFileName = "Personel_{$id_personal}.{$fileExtension}";
+    //             $targetFilePath = $targetDir . $newFileName;
+    
+    //             $oldFiles = glob($targetDir . "Personel_{$id_personal}.*"); // ค้นหาทุกนามสกุล
+    //             foreach ($oldFiles as $oldFile) {
+    //                 if (file_exists($oldFile)) {
+    //                     unlink($oldFile);
+    //                 }
+    //             }
+        
+    //             if (!move_uploaded_file($file['tmp_name'], $targetFilePath)) {
+    //                 http_response_code(500);
+    //                 echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกไฟล์ได้"]);
+    //                 exit;
+    //             }
+    //         }
+    //         //var_dump('dddd test alret');
+    //         if ($newFileName) {
+    //             $stmt = $conn->prepare("UPDATE personal SET 
+    //                                     prename = ?, name = ?, surname = ?, image_personal_name = ?, 
+    //                                     position = ?, department = ?, email = ?, 
+    //                                     phone = ?, extension = ?, updated_by = ?
+    //                                     WHERE id_personal = ?");
+    //             $stmt->bind_param("sssssssssii", $prename, $name, $surname, $newFileName, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
+    //         } else {
+    //             $stmt = $conn->prepare("UPDATE personal SET prename = ?,
+    //                                     name = ?, surname = ?, position = ?, 
+    //                                     department = ?, email = ?, phone = ?, 
+    //                                     extension = ?, updated_by = ?
+    //                                     WHERE id_personal = ?");
+    //             $stmt->bind_param("ssssssssii", $prename, $name, $surname, $position, $department, $email, $phone, $extension, $updated_by, $id_personal);
+    //         }
+        
+    //         if ($stmt->execute()) {
+    //             echo json_encode(["success" => true, "message" => "อัปเดตข้อมูลสำเร็จ"]);
+    //         } else {
+    //             http_response_code(500);
+    //             echo json_encode(["success" => false, "message" => "ไม่สามารถบันทึกข้อมูลลงในฐานข้อมูล"]);
+    //         }
+        
+    //         $stmt->close();
+    //     }
+    // } else {
+    //     http_response_code(405);
+    //     echo json_encode(["success" => false, "message" => "Method Not Allowed"]);
+    // }
 
     // if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     //     if (isset($_FILES['image_personal_name'])) {
